@@ -1,0 +1,647 @@
+<!-- <!DOCTYPE html> -->
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Datagrid_Informix</title>
+    
+    <link rel="stylesheet" type="text/css" href="easyui/themes/default/easyui.css">
+    <link rel="stylesheet" type="text/css" href="easyui/themes/icon.css">
+    <link rel="stylesheet" type="text/css" href="easyui/demo.css">
+    <link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css" />
+    <script type="text/javascript" src="easyui/jquery.min.js"></script>
+    <script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
+    <script type="text/javascript" src="easyui/jquery.easyui.min.js"></script>
+    
+    <link type="text/css" rel="stylesheet" href="jsUML2/css/UDStyle.css" media="screen" />
+    <script type="text/javascript" src="jsUML2/UDCore.js"></script>
+    <script type="text/javascript" src="jsUML2/UDModules.js"></script>
+    
+    <style>
+    	#idVilSortable{position:relative}
+		#idVilSortable ul{ list-style-type: none; margin: 0; padding: 0; width: 100%; }
+		#idVilSortable li{ margin: 0 3px 3px 3px; padding: 0.4em; padding-left: 2em; font-size: 1.4em; height: 18px; }
+		#idVilSortable li span.ui-icon-circle-plus{ position: absolute; margin-left: -2.7em; }
+		#idVilSortable li span.ui-icon-circle-minus{ position: absolute; margin-left: -1.7em; }
+	</style>
+	
+    <script>
+    	var classDiagram,tabCache={},clzCache={};
+    	var url='SqlTest',action={getTables:'getTables',getColumns:'getColumns',getRows:'getRows',getRowsFilter:'getRowsFilter',getQuery:'getQuery',getQueryFilter:'getQueryFilter',getClass:'getClass',getVilRefProp:'getVilRefProp',saveVilRefProp:'saveVilRefProp',getVilRefJson:'getVilRefJson',saveVilRefJson:'saveVilRefJson',getVilFile:'getVilFile',sqlExecute:'sqlExecute',getVilFieldJson:'getVilFieldJson',saveVilFieldJson:'saveVilFieldJson'};
+    	function drawCDs(rows){
+    		var id='idClassDiagram';
+    		if(!rows){
+    			classDiagram= new UMLClassDiagram({id:id,width:$('#idCdWidth').val(),height:$('#idCdHeight').val()});
+    			var i=0;for(var t in tabCache)drawCD(tabCache[t],++i);
+    		}else{
+    			var i=0;for(var t in tabCache)i++;
+    			return drawCD(rows,i);
+    		}
+	    	function drawCD(rows,i){
+	    		if(!rows||!i)return;
+				var clz = new UMLClass({x:20+((i-1)%3)*280,y:50+(Math.floor((i-1)/3)*200)});
+				classDiagram.addElement(clz);
+				clz.setName(rows[0].tabname);
+				clz.width(200);
+				for(var c in rows){
+					clz.addAttribute((rows[c].pk?'[PK]':'')+rows[c].colname+(rows[c].fk?'['+rows[c].ptab+'('+rows[c].pcol+')]':''));
+					for(var t in tabCache)
+						if(rows[c].ptab==t)
+							classDiagram.addElement(new UMLDependency({b:clzCache[t],a:clz}));
+				}
+				for(var t in tabCache)
+					for(var c1 in tabCache[t])
+						if(rows[0].tabname==tabCache[t][c1].ptab)
+							classDiagram.addElement(new UMLDependency({b:clz,a:clzCache[t]}));
+				classDiagram.draw();
+				classDiagram.interaction(true);
+				return clz;
+	    	}
+    	}
+    	function initDg(action,para){
+    		switch(action){
+    		case 'getColumns':
+    			$('<table class="easyui-datagrid"></table>').appendTo($('#tabMeta .easyui-tabs').tabs('add',{title:para.tab,selected:true,closable:true}).find('.panel-body').last())
+					.datagrid().datagrid({
+						title:null,url:null,queryParams:null,columns:para.columns,
+						rownumbers:false,singleSelect:false,fitColumns:false,border:false,
+						onLoadSuccess:tabMetaLoadSuccess,onClickRow:onClickRow})
+					.datagrid('loadData',para.data);
+    			break;
+    		case 'getRows':
+    			$('<table class="easyui-datagrid"></table>').appendTo($('#tabData .easyui-tabs').tabs('add',{title:para.tab,selected:true,closable:true}).find('.panel-body').last().append($('#tbData').clone().attr('id','tb'+para.tab).css('display','')))
+					.datagrid().datagrid({
+						title:null,url:url,queryParams:{db:para.db,action:action,tab:para.tab},columns:para.columns,method:'get',
+						rownumbers:true,singleSelect:true,fitColumns:false,border:false,pagination:true,pagePosition:'top',
+						toolbar:$('#tb'+para.tab),onDblClickRow:onDblClickRow});
+    			break;
+    		case 'sqlJoin':
+    			$('<table class="easyui-datagrid"></table>').appendTo($('#tabJoin .easyui-tabs').tabs('close','tabJoin').tabs('add',{title:'tabJoin',selected:true,closable:true}).find('.panel-body').last())
+					.datagrid().datagrid({
+						title:null,url:null,queryParams:null,columns:para.columns,
+						rownumbers:false,singleSelect:true,fitColumns:false,border:false,
+						onClickRow:onClickRowOrd})
+					.datagrid('loadData',para.cols);
+    			break;
+    		case 'getQuery':
+    			$('<table class="easyui-datagrid"></table>').appendTo($('#tabData .easyui-tabs').tabs('close','tabQuery').tabs('add',{title:'tabQuery',selected:true,closable:true}).find('.panel-body').last().append($('#tbData').clone().attr('id','tbQuery').css('display','')))
+					.datagrid().datagrid({
+						title:null,url:url,queryParams:{db:para.db,action:action,sql:para.sql},columns:[[]],method:'get',
+						rownumbers:true,singleSelect:true,fitColumns:false,border:false,pagination:true,pagePosition:'top',
+						toolbar:$('#tbQuery'),onLoadSuccess:tabQueryLoadSuccess});
+    			break;
+    		}
+    	}
+    	function tabMetaLoadSuccess(data){
+    		var tab=data.rows[0].tabname;
+    		if(!tabCache[tab]){
+    			tabCache[tab]=data.rows;
+    			clzCache[tab]=drawCDs(tabCache[tab]);
+    		}
+    		getRows(tab);
+    	}
+    	function tabQueryLoadSuccess(data){
+    		if(data && data.columns){
+    			var columns=[[]];
+    			$.each(data.columns,function(i,c){columns[0].push({field:c,title:c});});
+    			if(!$(this).datagrid('options').columns[0].length){
+    				$(this).datagrid({columns:columns});
+    				for(var c in columns[0])$('#tbQuery select').append($('<option></option>').attr("value",columns[0][c].field).text(columns[0][c].field));
+    			}
+    		}else if(data.errMsg)$(this).datagrid({url:null,columns:[[{field:'errMsg',title:'errMsg'}]]}).datagrid('loadData',[{errMsg:data.errMsg.replace(/\n/g,'<br/>')}]);
+    	}
+    	function getTables(sel){if(!$('option',sel).size())$.get(url,{db:$(':input[name$="db"].para').val(),action:action.getTables},function(tabs){$(sel).append('<option></option>');for(var t in tabs)$(sel).append($('<option></option>').attr("value",tabs[t]).text(tabs[t]));},'json');}
+    	function getColumns(tab){
+    		if(!tabCache[tab])
+	    		$.get(url,{db:$(':input[name$="db"].para').val(),action:action.getColumns,tab:tab},function(data){
+	    			if(data && data.rows && data.rows.length){
+		    			var columns=[[]];
+		    			$.each(data.columns,function(i,c){columns[0].push({field:c,title:c});});
+		    			initDg('getColumns',{columns:columns,tab:tab,data:data});
+	    			}
+			    },'json');
+    		else $('#tabMeta .easyui-tabs,#tabData .easyui-tabs').tabs('select',tab);
+    	}
+    	function getRows(tab){
+    		var columns=[[]];
+    		$.each($('#tabMeta .easyui-datagrid').filter(function(){return $(this).datagrid('getRows')[0].tabname==tab;}).datagrid('getRows'),function(i,c){columns[0].push({field:c.colname,title:c.colname});});
+    		initDg('getRows',{db:$(':input[name$="db"].para').val(),columns:columns,tab:tab});
+    		for(var c in columns[0])$('#tb'+tab+' select').append($('<option></option>').attr("value",columns[0][c].field).text(columns[0][c].field));
+    	}
+    	function getQuery(){initDg('getQuery',{db:$(':input[name$="db"].para').val(),sql:accord(),page:1,rows:1})}//$('#sqlJoin').val()
+    	function getFilter(input){
+    		var $panel = $(input).parents('.panel-body').first();
+    		var $dg=$('.easyui-datagrid',$panel);
+    		var col=$('.selData option:selected',$panel).text();
+    		var val=$('.valData',$panel).val();
+    		var queryParams=$dg.datagrid('options').queryParams;
+    		queryParams.action=$(input).parents('#tabData').size()?(val!=''?action.getRowsFilter:action.getRows):(val!=''?action.getQueryFilter:action.getQuery);
+    		queryParams.col=col;
+    		queryParams.val=val;
+	    	$dg.datagrid('load');
+    	}
+    	function onClickRow(){
+			if($('#tabMeta .easyui-tabs .easyui-datagrid').size()){
+				var columns=[[]],cols=[];
+				$.each($('#tabMeta .easyui-tabs .easyui-datagrid').filter(function(){return $(this).datagrid('getSelections').length}).each(function(){
+					$.each($(this).datagrid('getSelections'),function(i,c){cols.push(c);});})
+					.first().datagrid('getData').columns,function(i,c){columns[0].push({field:c,title:c});
+				});
+				initDg('sqlJoin',{columns:columns,cols:cols});
+				sqlJoin();
+			}
+    	}
+    	function onDblClickCell(){
+			if($('#tabMeta .easyui-tabs').tabs('getSelected')){
+				$('#tabMeta .easyui-tabs').tabs('getSelected').find('.easyui-datagrid').datagrid('selectAll');
+				onClickRow();
+			}
+		}
+    	function onClickRowOrd(i,r){
+    		var $tabJoin=$('#tabJoin .easyui-tabs').first().tabs('getTab','tabJoin').find('.easyui-datagrid');
+    		var rows = $tabJoin.datagrid('getData').rows;
+    		var ord=[];
+    		for(var c in rows){
+    			for(var t=0;t<ord.length;t++)
+    				if(rows[c].tabname==ord[t].tab)
+    					break;
+	    		if(t==ord.length)ord.push({i:ord.length-(rows[c].tabname==r.tabname?1.5:0),tab:rows[c].tabname});
+	    		for(var t in ord)
+					if(rows[c].tabname==ord[t].tab)
+						rows[c].i=ord[t].i;
+    		}
+    		$tabJoin.datagrid('loadData',rows.sort(function(a,b){return a.i-b.i;}));
+    		sqlJoin();
+    	}
+    	function sqlJoin(){
+    		var join=[];
+    		var sql='select \n';
+			if($('#tabJoin .easyui-tabs').first().tabs('getTab','tabJoin'))
+				$.each($('#tabJoin .easyui-tabs').first().tabs('getTab','tabJoin').find('.easyui-datagrid').datagrid('getRows'),function(i,c){
+					for(var t=0;t<join.length;t++)
+						if(join[t][0].tabname==c.tabname)
+							break;
+					if(t==join.length)join.push(tabCache[c.tabname]);
+					for(var t in join)
+						if(join[t][0].tabname==c.tabname)
+							sql+=' _'+t+'.'+c.colname+',\n';
+				});
+    		sql=sql.substring(0,sql.length-2)+'\n from \n';
+    		for(var t in join){
+    			sql+=(t==0?' ':' left join ')+join[t][0].tabname+' _'+t+(t==0?' ':' on ');
+    			for(var c in join[t])
+    				for(var t1=0;t1<t;t1++)
+    					for(var c1 in join[t1])
+    						if((join[t][c].tabname==join[t1][c1].ptab && join[t][c].colname==join[t1][c1].pcol)||(join[t][c].ptab==join[t1][c1].tabname && join[t][c].pcol==join[t1][c1].colname))
+    							sql+='_'+t+'.'+join[t][c].colname+' = _'+t1+'.'+join[t1][c1].colname+' and ';
+		    	sql=sql.substring(0,sql.length-(t==0?0:4))+' \n';
+    		}
+    		sql+=';';
+    		accord(sql);//$('#sqlJoin').val(sql);
+    	}
+    	function tabOnSelect(title){$('#tabMeta .easyui-tabs,#tabData .easyui-tabs').each(function(){if($(this).tabs('getSelected') && $(this).tabs('getSelected').panel('options').title!=title)$(this).tabs('select',title);});tabResize.call(this);}
+    	function tabOnClose(title){
+    		tabCache[title]=null;
+    		$('#tabMeta .easyui-tabs,#tabData .easyui-tabs').each(function(){$(this).tabs('close',title);});
+    		if($(this).parents('#tabMeta').size())if($('#tabMeta .easyui-tabs .panel-body').size())onClickRow();else $('#tabJoin .easyui-tabs').tabs('close','tabJoin');
+    	}
+    	window.onload=function(){drawCDs();}
+    	function getClass(){
+    		var clz=$('#idClass').val();
+			var $tbl=$('<table border="1"><tr class="ref"><td></td><td></td></tr><tr class="sort"><td valign="top"><ul></ul></td><td valign="top"><ul></ul></td></tr></table>').appendTo($('#idVilSortable').empty().append('<table><tr><td valign="top"></td><td valign="top"><table id="idVilDesc" border="1" style="border-collapse:collapse"></table></td></tr></table>').find('td').first());
+    		if($('#tabJoin .easyui-tabs').first().tabs('getTab','tabJoin')){
+				$.each($('#tabJoin .easyui-tabs').first().tabs('getTab','tabJoin').find('.easyui-datagrid').datagrid('getRows'),function(i,c){$tbl.find('.sort ul:odd').append(sortIcon(c.colname));});
+				var ord=[];
+				$.each($('#tabJoin .easyui-tabs').first().tabs('getTab','tabJoin').find('.easyui-datagrid').datagrid('getRows'),function(i,c){
+	    			for(var t=0;t<ord.length;t++)
+	    				if(ord[t]==c.tabname)
+	    					break;
+	    			if(t==ord.length)ord.push(c.tabname);
+	    		});
+			}
+			$.post(url,{action:action.getClass,clz:clz},function(data){$.each(data,function(i,c){$tbl.find('.sort ul:even').append(sortIcon(c));});},'json');
+			$tbl.find('.ref td:odd').html(ord?ord.sort():'');
+    		$tbl.find('.ref td:even').html(clz);
+    		$tbl.find('ul').sortable().disableSelection();
+    	}
+		function vilFile(file){
+			var fd=new FormData();
+			fd.append('action',action.getVilFile);
+			fd.append("vilFile",$('#'+file)[0].files[0]);
+			$.ajax({
+				url:url,
+				data:fd,
+				type: 'POST',
+				cache: false,
+		        dataType:'json',
+				processData: false,
+				contentType: false,
+				success:function(data){$('.sort ul:even').find('.refName').each(function(i){$(this).parent().children('.refDesc').val(data[$(this).html()]);});},
+				error: function(xhr){alert('ajaxFd:Ajax request 發生錯誤:[status:'+xhr.status+'][status-text:'+xhr.statusText+']');}
+			});
+		}
+		function getVilRef(type){
+    		$.post(url,{action:action[type]},function(data){
+				$('.ref td').each(function(i){
+	    			var ref=$(this).html();
+	    			$('.sort ul:'+(i%2==0?'even':'odd')).find('.refName').each(function(){if(data[ref] && data[ref][$(this).html()])$(this).parent().children('.refDesc').val(data[ref][$(this).html()].desc);});
+				});
+    		},'json');
+    	}
+    	function saveVilRef(type){
+    		var map={};
+    		for(var i1=$('.sort ul:odd').find('.refName').size();i1<$('.sort ul:even').find('.refName').size();i1++)$(sortIcon()).insertAfter($('.sort ul:odd').find('li')[i1-1]);//init
+    		$('.ref td').each(function(i){
+	    		var ref=$(this).html();
+				if(ref){
+					map[ref]={};
+					$('.sort ul:'+(i%2==0?'even':'odd')).find('.refName').each(function(i1){
+						if($(this).html()){
+							map[ref][$(this).html()]={};
+							map[ref][$(this).html()].desc=$(this).parent().children('.refDesc').val();
+							map[ref][$(this).html()].ref=(i%2==0?(true || $('.sort ul:odd').find('.refName').size()>i1 && $('.sort ul:odd').find('.refName')[i1].innerHTML!='')?$('.ref td:odd').html()+'.'+($('#idVilSaveRef').prop('checked')?$('.sort ul:odd').find('.refName')[i1].innerHTML:''):'':'');
+						}
+					});
+				}
+			});
+    		$.post(url,{action:action[type],map:JSON.stringify(map)},function(data){},'json');
+    	}
+		function sortVilRef(type){
+    		$('.sort ul:odd').find('.refName').filter(function(){return $(this).html()=='';}).parent('li').remove();//init
+    		$.post(url,{action:action[type]},function(data){
+    			var ref0=$('.ref td:even').html();
+    			var ref1=$('.ref td:odd').html();
+    			$('.sort ul:even').find('.refName').each(function(i){
+	    			var t=true;
+    				if(data[ref0] && data[ref0][$(this).html()])
+    					$.each(data[ref0][$(this).html()].ref.split(','),function(i1,c){
+    						if(c.split('\.')[0]==ref1){
+    							var $li=$('.sort ul:odd').find('.refName').filter(function(){return $(this).html()==c.split('\.')[1]});
+    							if($li.size()){
+    								if(i>0)$li.parent('li').insertAfter($('.sort ul:odd').find('li')[i-1]);else $li.parent('li').prependTo($('.sort ul:odd'));
+									t=false;	    								
+    							}
+    						}
+    					});
+	    			if(t)if(i>0)$(sortIcon()).insertAfter($('.sort ul:odd').find('li')[i-1]);else $(sortIcon()).prependTo($('.sort ul:odd'));
+    			});
+    		},'json');
+			$('.sort li').unbind('mouseup').mouseup(function(){
+				var s0='',s1='INSERT INTO '+$('.ref td:odd').html()+'\n(\n',s2='VALUES\n(\n';
+				$('.sort ul:even').find('.refName').each(function(i){
+					if($('.sort ul:odd').find('.refName').size()>i && $('.sort ul:odd').find('.refName')[i].innerHTML){
+						var s=$('.sort ul:odd').find('.refName')[i].innerHTML;
+						s0+="<result property=\""+$(this).html()+"\" column=\""+s+"\" />\n";
+						s1+=s+',\n';
+						s2+='#{'+$(this).html()+'},\n';
+					}
+				});
+				$('#idVilSortXml').val(s0+'\n'+s1.substring(0,s1.length-2)+'\n)\n'+s2.substring(0,s2.length-2)+'\n)');
+			});
+			getVilRef(type);
+    	}
+		function getVilFieldJson(){
+			$.post(url,{action:action.getVilFieldJson},function(data){
+				var field=new Function("return "+data+";")();
+				var clz=$('.ref td:even').html();
+				if(field && field[clz])
+					$.each(field[clz],function(i,c){
+						var t=null;
+						$('.sort ul:even').find('.refName').each(function(){
+							if($(this).html()==c.refName){
+								$(this).parent().find('.refDesc').val(c.refDesc);
+								t=this;
+							}
+						});
+						if(t)
+							if(i>0)$(t).parent('li').insertAfter($('.sort ul:even').find('li')[i-1]);
+							else $(t).parent('li').prependTo($('.sort ul:even'));
+						else
+							if(i>0)$(sortIcon()).insertAfter($('.sort ul:even').find('li')[i-1]);
+							else $(sortIcon()).prependTo($('.sort ul:even'));
+					});
+			});
+		}
+		function saveVilFieldJson(){
+			var field={};
+			var clz=$('.ref td:even').html();
+			field[clz]=[];
+			$('.sort ul:even').find('.refName').each(function(){field[clz].push({refName:$(this).html(),refDesc:$(this).parent().find('.refDesc').val()});});
+			$.post(url,{action:action.saveVilFieldJson,map:JSON.stringify(field)},function(data){},'json');
+		}
+    	function sortIcon(c){return '<li class="ui-state-default"><span class="ui-icon ui-icon-circle-plus" onclick="sortPlus(this)"></span><span class="ui-icon ui-icon-circle-minus" onclick="sortMinus(this)"></span><span class="refName">'+(c?c.refName?c.refName:c:'')+'</span><input type="text" class="refDesc"/><span class="refType">'+((c && c.refType)?c.refType:'')+'</span></li>';}
+    	function sortPlus(input){$(input).parent('li').first().after(sortIcon());}
+    	function sortMinus(input){$(input).parent('li').first().remove();}
+		function service(input){
+    		var para={};
+    		para.service=$(input).val();
+    		para.action=$(input.form).find('.action option:selected').text();
+    		$(input.form).find('.para').each(function(){para[$(this).attr('name')]=$(this).val();});
+    		if(!$('#tabWs>.easyui-tabs').tabs('getTab',para.service))$('#tabWs>.easyui-tabs').tabs('add',{title:para.service,selected:true,closable:true}).tabs('getTab',para.service).panel({content:$('<div class="easyui-tabs" data-options="border:false"></div>')});
+    		$.get('ServiceTest',para,function(data){
+    			if(!data)data={rows:[{errMsg:'!data'}]};else if(!data.rows)if(data.errMsg)data={rows:[{errMsg:data.errMsg}]};else data={rows:[{errMsg:'!data.rows'}]};
+    			var columns=[[]];
+    			for(var c in data.rows[0])columns[0].push({field:c,title:c});
+    			$('<table class="easyui-datagrid"></table>').appendTo($('#tabWs>.easyui-tabs').tabs('getTab',para.service).find('.easyui-tabs').tabs('add',{title:para.action,selected:true,closable:true}).find('.panel-body').last())
+					.datagrid().datagrid({
+						title:null,url:null,queryParams:para,columns:columns,
+						rownumbers:true,singleSelect:true,fitColumns:false,border:false})
+					.datagrid('loadData',data);
+    		},'json');
+    	}
+		function onDblClickRow(rowIndex){
+			var row={};
+			$.each($(this).datagrid('options').columns[0],function(i,c){
+				row[c.field]='';
+				c.editor='text';
+			});
+			$(this).datagrid('beginEdit',rowIndex);
+			row.sqlMode=1;
+			return row;
+		}
+		function getMeta(tab,col){
+			var meta={};
+			$.each($('#tabMeta .easyui-tabs').tabs('getTab',tab).find('.easyui-datagrid').datagrid('getData').rows,function(i,c){
+				meta[c.colname]={};
+				$.each(c,function(i1,c1){meta[c.colname][i1]=c1;});
+			});
+			return {pk:meta[col].pk,type:meta[col].type};
+		}
+		function sqlAppend(){
+			var $tab=$('#tabData .easyui-tabs').tabs('getSelected').find('.easyui-datagrid');
+			var row=onDblClickRow.call($tab);
+			$tab.datagrid('appendRow',row).datagrid('beginEdit',$tab.datagrid('getRows').length-1);
+		}
+		function sqlDelete(){
+			var $tab=$('#tabData .easyui-tabs').tabs('getSelected').find('.easyui-datagrid');
+			var tab=$tab.parents('.easyui-tabs').tabs('getSelected').panel('options').title;
+			onDblClickRow.call($tab);
+			$.each($tab.datagrid('getSelections'),function(i,c){
+				c.sqlMode=2;
+				var i1=$tab.datagrid('getRowIndex',c);
+				$tab.datagrid('beginEdit',i1);
+				$.each($tab.datagrid('options').columns[0],function(i,c){if(!getMeta(tab,c.field).pk)$($tab.datagrid('getEditor',{index:i1,field:c.field}).target).val('');});
+			});
+		}
+		function sqlSave(){
+			var $tab=$('#tabData .easyui-tabs').tabs('getSelected').find('.easyui-datagrid');
+			var tab=$tab.parents('.easyui-tabs').tabs('getSelected').panel('options').title;
+			var s='';
+			
+			$.each($tab.datagrid('getRows'),function(i,c){$tab.datagrid('endEdit',i);});
+			$.each($tab.datagrid('getChanges'),function(i,c){
+				var s1='',s2='';
+				if(c.sqlMode==1){
+					s1+='INSERT INTO '+tab+' \n(\n';
+					s2+=' VALUES\n(\n';
+				}else if(c.sqlMode==2){
+					s1+='DELETE FROM '+tab+' \n';
+					s2+=' WHERE \n';
+				}else{
+					s1+='UPDATE '+tab+' SET \n';
+					s2+=' WHERE \n';
+				}
+				$.each(c,function(i1,c1){
+					if(i1!='sqlMode')
+						if(c.sqlMode==1){
+							s1+=i1+',\n';
+							s2+=(c1!=''?"'"+c1+"'":'null')+' /*'+i1+'('+getMeta(tab,i1).type+')'+'*/'+',\n';
+						}else if(c.sqlMode==2){
+							if(getMeta(tab,i1).pk)s2+=i1+"='"+c1+"',\n";
+						}else{
+							if(getMeta(tab,i1).pk)s2+=i1+"='"+c1+"',\n";
+							else s1+=i1+"='"+c1+"',\n";
+						}
+				});
+				if(c.sqlMode==1)s+=s1.substring(0,s1.length-2)+'\n)\n'+s2.substring(0,s2.length-2)+'\n);\n\n';
+				else if(c.sqlMode==2)s+=s1+s2.substring(0,s2.length-2)+'\n;\n\n';
+				else s+=s1.substring(0,s1.length-2)+'\n'+s2.substring(0,s2.length-2)+'\n;\n\n';
+				c.sqlMode=null;
+			});
+			$tab.datagrid('acceptChanges');
+			accord(s);//$('#sqlJoin').val(s);
+			sqlExecute();
+		}
+		function sqlExecute(){
+			var sql=accord().replace(/ /g,'\u0020');//$('#sqlJoin').val()
+			var jSql='',jSuccess='',jFail='';
+			accord(sql,jSql,jSuccess,jFail);
+			$.post(url,{db:$(':input[name$="db"].para').val(),action:action.sqlExecute,sql:sql},function(data){
+				$.each(data.jSql,function(i,c){jSql+=c+'\n';});
+				$.each(data.jSuccess,function(i,c){jSuccess+=c+'\n';});
+				$.each(data.jFail,function(i,c){jFail+=c+'\n';});
+				accord(sql,jSql,jSuccess,jFail);
+			},'json');
+		}
+			function accord(sql,jSql,jSuccess,jFail){
+				var style='border:0;width:100%;height:100%;resize:none;white-space:nowrap';
+				sql=sql||$('#sqlJoin').val()||'';
+				$('#idAcrdSql').accordion('getPanel','sql').panel('options').content='<textarea id="sqlJoin" style="'+style+'">'+sql+'</textarea>';
+				$('#idAcrdSql').accordion('getPanel','sql').panel('refresh');
+				$('#idAcrdSql').accordion('getPanel','jSql').panel('options').content='<textarea style="'+style+'">'+(jSql?jSql:'')+'</textarea>';
+				$('#idAcrdSql').accordion('getPanel','jSql').panel('refresh');
+				$('#idAcrdSql').accordion('getPanel','jSuccess').panel('options').content='<textarea style="'+style+'">'+(jSuccess?jSuccess:'')+'</textarea>';
+				$('#idAcrdSql').accordion('getPanel','jSuccess').panel('refresh');
+				$('#idAcrdSql').accordion('getPanel','jFail').panel('options').content='<textarea style="'+style+'">'+(jFail?jFail:'')+'</textarea>';
+				$('#idAcrdSql').accordion('getPanel','jFail').panel('refresh');
+				$('#idAcrdSql').accordion('resize');
+				return $('#sqlJoin').val();//$('#sqlJoin').val(jSql);
+			}
+		function setDb(sel){
+			$(':input[name$="db"].para').val($('option:selected',sel).text()).val(sel.text);
+			getTables($('#idTabSel').empty()[0]);
+			accord();//$('#sqlJoin').val(jSql);
+		}
+		function descClz(){
+			var $tab=$('#idVilDesc').empty();
+			$('.sort ul:even').find('.refName').each(function(){
+				$tab.append('<tr><td>'+$(this).html()+'</td><td>'+$(this).parent().find('.refType').html()+'</td><td>'+$(this).parent().find('.refDesc').val()+'</td></tr>');
+			});
+		}
+		function moveCD(){$('#idClassDiagram').appendTo($('div.tabClassDiagram'));}
+		function tabResize(){var $panel=$(this).tabs('getSelected');$panel.find('.easyui-datagrid').datagrid('resize',{height:$panel.css('height').replace('px','')*1});}
+    </script>
+</head>
+<body>
+	<div class="easyui-tabs" data-options="border:false,fit:true">
+		<div title="SqlTest">
+			<div class="easyui-layout" data-options="fit:true">
+				<div data-options="region:'north',split:true" style="height:50px">
+					<table border="1" style="border-collapse:collapse;margin:5px">
+						<tr>
+							<td>
+								<a href="#" class="easyui-menubutton" data-options="menu:'#menuDb',iconCls:'icon-edit'">DB</a>
+								<a href="#" class="easyui-menubutton" data-options="menu:'#menuSql',iconCls:'icon-edit'">SQL</a>
+								<a href="#" class="easyui-menubutton" data-options="menu:'#menuVil',iconCls:'icon-edit'">Vil</a>
+								<div id="menuDb" style="width:100px" data-options="onClick:setDb">
+									<div>vil</div>
+									<div>ci</div>
+									<div>app</div>
+								</div>
+								<div id="menuSql" style="width:100px" data-options="">
+									<div onclick="onDblClickCell()">onDblClickCell</div>
+									<div onclick="sqlJoin()">sqlJoin</div>
+									<div onclick="getQuery()">getQuery</div>
+									<div onclick="sqlExecute()">sqlExecute</div>
+								</div>
+								<div id="menuVil" style="width:100px">
+									<div data-options="iconCls:'icon-save'" onclick="getClass()">getClass</div>
+									<div data-options="iconCls:'icon-save'" onclick="vilFile('idVilFile')">vilFile</div>
+									<div data-options="iconCls:'icon-undo'" onclick="$('.sort ul input').val('')">reset</div>
+									<div data-options="iconCls:'icon-undo'" onclick="descClz()">descClz</div>
+									<div class="menu-sep"></div>
+									<div data-options="iconCls:'icon-search'">
+										<span>VilRef</span>
+										<div>
+											<div>
+												<span>VilRefProp</span>
+												<div>
+													<div data-options="iconCls:'icon-reload'" onclick="getVilRef($('.menu-text',this).html())">getVilRefProp</div>
+													<div data-options="iconCls:'icon-save'" onclick="saveVilRef($('.menu-text',this).html())">saveVilRefProp</div>
+												</div>
+											</div>
+											<div>
+												<span>VilRefJson</span>
+												<div>
+													<div data-options="iconCls:'icon-reload'" onclick="getVilRef($('.menu-text',this).html())">getVilRefJson</div>
+													<div data-options="iconCls:'icon-save'" onclick="saveVilRef($('.menu-text',this).html())">saveVilRefJson</div>
+												</div>
+											</div>
+											<div>
+												<span>VilRefSort</span>
+												<div>
+													<div data-options="iconCls:'icon-reload'" onclick="sortVilRef($('.menu-text',this).html())">getVilRefProp</div>
+													<div data-options="iconCls:'icon-reload'" onclick="sortVilRef($('.menu-text',this).html())">getVilRefJson</div>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div data-options="iconCls:'icon-search'">
+										<span>VilField</span>
+										<div>
+											<div data-options="iconCls:'icon-reload'" onclick="getVilFieldJson()">getVilFieldJson</div>
+											<div data-options="iconCls:'icon-save'" onclick="saveVilFieldJson()">saveVilFieldJson</div>
+										</div>
+									</div>
+								</div>
+							</td>
+							<td>
+								<input type="text" name="db" class="para" size="2" readonly value="vil"/>
+								<select id="idTabSel" onclick="getTables(this)" onchange="getColumns($('option:selected',this).text())"></select>
+								<input type="text" id="idTab" value="vil_traffic_rule" size="40"/>
+								<a href="#" class="easyui-linkbutton" data-options="iconCls:'icon-search'" onclick="getColumns($('#idTab').val())">查詢</a>
+							</td>
+							<td>
+								<input type="text" id="idClass" value="test.ViolationOuterObject" size="40"/>
+								<div style='display:inline-block;position:relative;border:solid 1px red'><input type='text' value="選擇檔案" readonly style='width:150px;height:20px'/><input type='file' id="idVilFile" style='position:absolute;opacity:0;filter:alpha(opacity=0);z-index:1;left:0px;width:150px;height:20px' onchange="this.parentNode.getElementsByTagName('input')[0].value=this.value.substring(this.value.lastIndexOf('\\')+1)"/></div>
+								<input type="checkbox" id="idVilSaveRef"/>
+							</td>
+							<td>
+								<input type="text" id="idCdWidth" value="900" size="5"/><input type="text" id="idCdHeight" value="800" size="5"/><input type="button" value="initCD" onclick="drawCDs()"/><input type="button" value="moveCD" onclick="moveCD()"/>
+							</td>
+						</tr>
+					</table>
+				</div>
+				
+				<div data-options="region:'west',split:true,title:'layMeta',iconCls:'icon-ok'" style="width:400px">
+					<div class="easyui-layout" data-options="fit:true">
+						<div id="tabMeta" data-options="region:'north',split:true" style="height:300px">
+							<div class="easyui-tabs" data-options="border:false,fit:true,onSelect:tabOnSelect,onClose:tabOnClose"></div>
+						</div>
+						<div id="tabJoin" data-options="region:'center'">
+							<div class="easyui-tabs" data-options="border:false,fit:true,onSelect:tabResize"></div>
+						</div>
+					</div>
+				</div>
+				
+				<div data-options="region:'center',title:'layData',iconCls:'icon-ok'">
+					<div class="easyui-tabs" data-options="border:false,fit:true">
+						<div id="tabData" title="tabData">
+							<div class="easyui-tabs" data-options="border:false,fit:true,onSelect:tabOnSelect,onClose:tabOnClose"></div>
+						</div>
+						<div title="tabClassDiagram">
+							<div id="idClassDiagram" style="width:100%;height:100%"></div>
+						</div>
+						<div title="tabClass">
+							<div class="easyui-layout" data-options="fit:true">
+								<div data-options="region:'west',split:true" style="width:700px"><div id="idVilSortable"></div></div>
+								<div data-options="region:'center'"><textarea id="idVilSortXml" style='border:0;width:100%;height:100%;resize:none;white-space:nowrap'></textarea></div>
+							</div>
+						</div>
+					</div>
+				</div>
+				
+				<div data-options="region:'east',split:true,title:'tabScript',iconCls:'icon-ok'" style="width:400px">
+					<div id="idAcrdSql" class="easyui-accordion" data-options="fit:true">
+						<div title="sql" data-options="iconCls:'icon-search'"></div>
+						<div title="jSql" data-options="iconCls:'icon-cancel'"></div>
+						<div title="jSuccess" data-options="iconCls:'icon-ok'"></div>
+						<div title="jFail" data-options="iconCls:'icon-help'"></div>
+					</div>
+				</div>
+				
+				<div data-options="region:'south',split:true" style="height:50px">
+					batch_job_execution_params.EmvViolationOuterObject.<a href="http://www.jeasyui.com/documentation/layout.php" target="_blank">layout</a>.ch.mail.daoxml<br/>
+					space.textarea.delete+git.ddl.static.favor.excel.jenkins
+					<div id="tbData" style="display:none">
+						<select class="selData"></select>
+						<input type="text" class="valData" size="20"/>
+						<a href="javascript:void(0)" class="easyui-linkbutton" iconCls="icon-search" plain="true" onclick="getFilter(this)">查詢</a>
+						<a href="javascript:void(0)" class="easyui-linkbutton" iconCls="icon-add" plain="true" onclick="sqlAppend()">新增</a>
+						<a href="javascript:void(0)" class="easyui-linkbutton" iconCls="icon-cancel" plain="true" onclick="sqlDelete()">刪除</a>
+						<a href="javascript:void(0)" class="easyui-linkbutton" iconCls="icon-save" plain="true" onclick="sqlSave()">儲存</a>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div title="classDiagram"><div class="tabClassDiagram"></div></div>
+		<div title="ServiceTest">
+			<table border="1" style="border-collapse:collapse">
+				<tr>
+					<td>
+						<form>
+							<label>url</label><input type="text" name="url" class="para" value="vil"/><input type="text" name="rowStart" class="para" value="1" size="2"/><input type="text" name="rowEnd" class="para" value="4" size="2"/><br/>
+							<label>driverId</label><input type="text" name="driverId" class="para" value="S123360863"/><br/>
+							<label>birthday</label><input type="text" name="birthday" class="para" value=""/><br/>
+							<label>plateNo</label><input type="text" name="plateNo" class="para" value="ZK-8034"/><br/>
+							<label>carKind</label><input type="text" name="carKind" class="para" value=""/><br/>
+							<label>ticket</label><input type="text" name="ticket" class="para" value="TSTAL0001"/><br/>
+							<label>resp_tp</label><input type="text" name="resp_tp" class="para" value=""/><br/>
+							<label>pay_way</label><input type="text" name="pay_way" class="para" value=""/><br/>
+							<label>vilInDate</label><input type="text" name="vilInDate" class="para" value=""/><br/>
+							<label>rule1</label><input type="text" name="rule1" class="para" value="1210101"/><br/>
+							<label>rule2</label><input type="text" name="rule2" class="para" value="1210102"/><br/>
+							<label>rule3</label><input type="text" name="rule3" class="para" value="33"/><br/>
+							<label>rule4</label><input type="text" name="rule4" class="para" value="3020047"/><br/>
+							<select class="action">
+								<option>saveViolation</option>
+								<option>searchViolationByPerson</option>
+								<option>searchViolationByCar</option>
+								<option>searchCarViolation</option>
+								<option>searchPenaltyByNaturalPerson</option>
+								<option>searchPenaltyByLegalPerson</option>
+								<option>searchSuspDriverLicence</option>
+								<option>searchSuspPlate</option>
+								<option>searchMarkByDriver</option>
+								<option>searchMarkByNaturalPersonPage</option>
+								<option>searchMarkByLegalPersonPage</option>
+								<option>searchPaymentByNaturalPerson</option>
+								<option>searchPaymentByLegalPerson</option>
+								<option>searchPenaltyByNaturalPersonCount</option>
+								<option>searchPenaltyByLegalPersonCount</option>
+								<option>searchMarkByNaturalPersonCount</option>
+								<option>searchMarkByLegalPersonCount</option>
+								<option>searchPaymentByNaturalPersonCount</option>
+								<option>searchPaymentByLegalPersonCount</option>
+							</select><br/>
+							<input type="button" value="PolViolationService" onclick="service(this)"/>
+							<input type="button" value="EmvViolationService" onclick="service(this)"/>
+						</form>
+					</td>
+					<td><div id="tabWs"><div class="easyui-tabs" style="width:1200px;height:400px" data-options="border:false"></div></div></td>
+				</tr>
+			</table>
+		</div>
+	</div>
+</body>
+<script></script>
+</html>

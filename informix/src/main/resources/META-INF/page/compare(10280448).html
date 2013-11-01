@@ -1,0 +1,182 @@
+<html>
+<head>
+	<title>Compare</title>
+	<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>
+	<link rel="stylesheet" type="text/css" href="codemirror/lib/codemirror.css">
+	<script type="text/javascript" src="codemirror/lib/codemirror.js"></script>
+	<script type="text/javascript" src="codemirror/mode/javascript/javascript.js"></script>
+	
+	<link rel="stylesheet" type="text/css" href="easyui/themes/default/easyui.css">
+    <link rel="stylesheet" type="text/css" href="easyui/themes/icon.css">
+    <link rel="stylesheet" type="text/css" href="easyui/demo.css">
+    <script type="text/javascript" src="easyui/jquery.min.js"></script>
+    <script type="text/javascript" src="easyui/jquery.easyui.min.js"></script>
+    
+	<style>
+		.compDiff{background-color:EE8800}
+		.compSame{background-color: cyan}
+		.compBank{background-color: FFFFFF}
+		.compHove{background-color: CCCCCC}
+		a{text-decoration:none}
+	</style>
+</head>
+
+<body class="easyui-layout" data-options="fit:true">
+	<div data-options="region:'north',split:true" style="height:50px"></div>
+	<div data-options="region:'west',split:true" style="width:250px">
+		<div id="fileTree" class="easyui-tree" data-options="onClick:treeOnClick"></div>
+	</div>
+	<div data-options="region:'center'">
+		<div class="easyui-tabs" data-options="border:false,fit:true">
+			<div title="fileAcrd">
+				<div id="fileAcrd" class="easyui-accordion" data-options="fit:true,onSelect:getFile"></div>
+			</div>
+			<div title="fileTab" id="fileTab">
+				<table style="width:100%;height:100%;display:block">
+					<tr>
+						<td class="file1" valign="top" width="50%"></td>
+						<td class="file2" valign="top" width="50%"></td>
+					</tr>
+				</table>
+			</div>
+			<div title="fileMap" id="fileMap">
+				<table style="width:100%;height:100%;display:block;border-collapse:collapse;" border="1"></table>
+			</div>
+			<div title="mapWrite" id="mapWrite">
+				<textarea style="width:100%;height:100%;resize:none"></textarea>
+			</div>
+			<div title="fileComp" id="fileComp">
+				<table border="1" style="width:100%">
+					<tr><td colspan="2"><input type="button" value="compFile" onclick="compFile()"/><input type="button" value="clearFile" onclick="clearFile()"/><input name="compFile" style="color:red" readonly/></td></tr>
+					<tr class="fileComp">
+						<td valign="top" width="50%"><textarea rows="20" style="width:100%"></textarea></td>
+						<td valign="top" width="50%"><textarea rows="20" style="width:100%"></textarea></td>
+					<tr class="fileCm">
+						<td class="file1" valign="top" width="50%"></td>
+						<td class="file2" valign="top" width="50%"></td>
+					</tr>
+				</table>
+			</div>
+		</div>
+	</div>
+	<div data-options="region:'south',split:true" style="height:50px">
+		<input type="button" value="treeFile" onclick="treeFile()"/>
+		<input type="button" value="writeMap" onclick="writeMap()"/>
+		<input type="button" value="pasteFile" onclick="pasteFile()"/>
+		<div id="filePaste" class="easyui-dialog" data-options="title:'filePaste',iconCls:'icon-save',width:500,height:150">
+			<input type="text" name="file" readonly/><br/>
+			<input type="text" name="file1" style="width:100%" readonly/>
+			<input type="text" name="file2" style="width:100%" readonly/>
+			<input type="button" value="pasteFile1" onclick="pasteFile1()"/>
+			<input type="button" value="pasteFile2" onclick="pasteFile2()"/>
+		</div>
+	</div>
+</body>
+<script>
+window.onload=function(){
+	$('.easyui-tabs').tabs('select','fileTab');
+	//treeFile();
+	$.get('compare?action=getMap',function(data){$('#mapWrite textarea').val(data);});
+	$('#filePaste').dialog('close');
+}
+function treeFile(){
+	$.get('compare?action=treeFile',function(data){
+		$.each(data,function(i,c){$.each(c.children,function(i1,c1){
+			acrdFile(c1.text);
+			$('#fileMap table').append('<tr><td>'+c1.id+'</td><td>'+c1.root+'</td><td style="background-color:'+(c1.compare?'cyan':'yellow')+';cursor:pointer" onclick="treeOnClick({text:this.innerHTML})">'+c1.file+'</td><td style="background-color:'+(c1.exist1?'cyan':'orange')+'">'+c1.path1+'</td><td style="background-color:'+(c1.exist2?'cyan':'orange')+'">'+c1.path2+'</td></tr>');
+		})});
+		$('#fileTree').tree('loadData',data);
+	},'json');
+}
+function acrdFile(title){
+	$('#fileAcrd').accordion('add',{
+		title:title,
+		content:$('#fileTab table').clone().attr('id',title).css('display',''),
+		selected:false
+	});
+}
+function treeOnClick(node){
+	$('.easyui-tabs').tabs('select','fileTab');
+	$('#fileTab td').empty();
+	getFile(node.text);//$('#fileAcrd').accordion('select',node.text);
+	if(node.state)$('#fileTree').tree(node.state=='open'?'collapseAll':'expandAll');
+}
+function getFile(file){
+	var id=$('#fileMap table').find('td').filter(function(){return $(this).html()==file}).prev('td').prev('td').html();
+	if(id)$('#fileTree').tree('select',$('#fileTree').tree('find',id).target);
+	$.post('compare',{action:'getFile',file:file},function(data){if(data){
+		$('#fileTree').tree('update',{target:$('#fileTree').tree('getSelected').target,iconCls:(data.exist1 && data.exist2)?data.file1==data.file2?'icon-ok':'icon-no':'icon-cancel'});
+		$('#fileMap table').find('td').filter(function(){return $(this).html()==file}).css('backgroundColor',data.file1==data.file2?'cyan':'yellow').next('td').css('backgroundColor',data.exist1?'cyan':'orange').next('td').css('backgroundColor',data.exist2?'cyan':'orange');
+		compareFile(data.file1,data.file2,file);
+	}},'json');
+}
+function compareFile(t1,t2,file){
+	var t1=t1.split('\n');
+	var t2=t2.split('\n');
+	var test=[t1.toString()==t2.toString(),t1.length,t2.length];
+	$.each(t1,function(i){t1[i]=[t1[i],i,0];});
+	$.each(t2,function(i){t2[i]=[t2[i],i,0];});
+	for(var i1=0;i1<t1.length;i1++){
+		var i2=i1-1;
+		while(++i2<t2.length && t1[i1][0]!=t2[i2][0]);
+		if(i2==t2.length)t2.splice(i1,0,['','',0]);
+		else while(i1<i2)t1.splice(i1++,0,['','',0]);
+		if(t1[i1][0]==t2[i1][0]){t1[i1][2]=1;t2[i1][2]=1;}
+	}
+	for(var i=t1.length;i<t2.length;i++)t1.push(['','',0]);
+
+	var s1='',s2='',s3=[],s4=[];
+	$.each(t1,function(i,c){s1+=c[0]+(i<t1.length-1?'\n':'');s3.push([c[1],c[2]]);});
+	$.each(t2,function(i,c){s2+=c[0]+(i<t2.length-1?'\n':'');s4.push([c[1],c[2]]);});
+	var line1=function(line){return t1[line][1]};
+	var line2=function(line){return t2[line][1]};
+	
+	cmFile(s1,$('#fileTab table td.file1'+',#'+file+' td.file1'),line1,s3);
+	cmFile(s2,$('#fileTab table td.file2'+',#'+file+' td.file2'),line2,s4);
+}
+function cmFile(value,$td,line,mark){
+	$td.each(function(){
+		var $file=$('<div style="width:100%;border:solid 1px blue"></div>').appendTo($(this).empty());
+		var cm=CodeMirror($file[0], {
+			value:value,
+			firstLineNumber:0,
+			readOnly:true,
+			lineNumbers:true,
+			lineNumberFormatter:line
+		});
+		for(var i in mark)if(mark[i][0]!=='' && mark[i][1]!=1)
+			cm.markText({line:i*1,ch:0},{line:i*1},{className:mark[i][0]!==''?mark[i][1]==1?'compSame':'compDiff':'compBank'});
+		$file.find('.CodeMirror-code').each(function(){
+			$(this).children('div').each(function(i){
+				$(this).hover(
+					function(){$(this).parents('table').first().find('.CodeMirror-code').each(function(){$($(this).children('div')[i]).attr('class','compHove');});},
+					function(){$(this).parents('table').first().find('.CodeMirror-code').each(function(){$($(this).children('div')[i]).attr('class','');});}
+				);
+			});
+		});
+	});
+}
+function writeMap(){$.post('compare',{action:'writeMap',map:$('#mapWrite textarea').val()},function(){$.get('compare?action=getMap',function(data){$('#mapWrite textarea').val(data);});});}
+function pasteFile(){
+	if(!$('#fileTree').tree('getSelected'))return;
+	var file=$('#fileTree').tree('getSelected').text;
+	var $tab=$('#fileMap table').find('td').filter(function(){return $(this).html()==file});
+	var $dg=$('#filePaste').dialog();
+	$dg.find(':input[name$="file"]').val(file);
+	$dg.find(':input[name$="file1"]').val($tab.next('td').html());
+	$dg.find(':input[name$="file2"]').val($tab.next('td').next('td').html());
+}
+function pasteFile1(){$.post('compare',{action:'pasteFile1',file:$('#filePaste :input[name$="file"]').val()},function(){treeOnClick({text:$('#filePaste :input[name$="file"]').val()});$('#filePaste').dialog('close');})}
+function pasteFile2(){$.post('compare',{action:'pasteFile2',file:$('#filePaste :input[name$="file"]').val()},function(){treeOnClick({text:$('#filePaste :input[name$="file"]').val()});$('#filePaste').dialog('close');})}
+function compFile(){
+	var $text=$('#fileComp tr.fileComp textarea');
+	compareFile($text.eq(0).val(),$text.eq(1).val(),'fileComp');
+	$('#fileComp :input[name$="compFile"]').val($text.eq(0).val()==$text.eq(1).val()?'true':'false');
+}
+function clearFile(){
+	$('#fileComp tr.fileComp textarea').val('');
+	$('#fileComp tr.fileCm td').empty();
+	$('#fileComp :input[name$="compFile"]').val('');
+}
+</script>
+</html>
