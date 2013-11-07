@@ -22,19 +22,22 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 public class Compare extends HttpServlet {
+	private String mapFile="mapFile.txt";
 	@Override
 	protected void doGet(HttpServletRequest req, HttpServletResponse res)throws ServletException,IOException {
+		if(req.getParameter("map")!=null)mapFile=req.getParameter("map");
 		res.setContentType("text/html; charset=utf8");
 		String action=req.getParameter("action");
 		if("treeFile".equals(action))
 			res.getWriter().print(treeFile());
 		else if("getMap".equals(action))
-			res.getWriter().print(getMap(getServletContext(),"mapFile.txt"));
+			res.getWriter().print(getMap(getServletContext(),mapFile));
 		else if ("getPage".equals(action))
 			res.getWriter().print(getPage("/META-INF/page/compare(10280448).html"));
 	}
 	@Override
 	protected void doPost(HttpServletRequest req, HttpServletResponse res)throws ServletException, IOException {
+		if(req.getParameter("map")!=null)mapFile=req.getParameter("map");
 		req.setCharacterEncoding("UTF-8");
 		res.setContentType("text/html; charset=utf8");
 		String action=req.getParameter("action");
@@ -47,11 +50,13 @@ public class Compare extends HttpServlet {
 			pasteFile(file,1);
 		else if("pasteFile2".equals(action))
 			pasteFile(file,2);
+		else if("getMatch".equals(action))
+			res.getWriter().print(test.RegTest.match(req.getParameter("sb")));
 	}
 	
 	private String treeFile(){
 		JSONArray jAry = new JSONArray();
-		Map<String,String[]> map=mapFile(getServletContext(),"mapFile.txt");
+		Map<String,String[]> map=mapFile(getServletContext(),mapFile);
 		JSONObject obj = null;
 		JSONArray ary = null;
 		String root=null;
@@ -112,7 +117,7 @@ public class Compare extends HttpServlet {
 		return map;
 	}
 	private String getFile(String file){
-		Map<String,String[]> map=mapFile(getServletContext(),"mapFile.txt");
+		Map<String,String[]> map=mapFile(getServletContext(),mapFile);
 		if(map.get(file)!=null && map.get(file).length==2){
 			JSONObject jObj = new JSONObject();
 			try {
@@ -171,7 +176,7 @@ public class Compare extends HttpServlet {
 		return sb.toString();
 	}
 	private void writeMap(String map){
-		String root="D:\\juno1\\workspace\\demo1\\src\\main\\webapp\\mapFile.txt";
+		String root="D:\\juno1\\workspace\\demo1\\src\\main\\webapp\\"+mapFile;
 		BufferedWriter bw=null;
 		try {
 			bw = new BufferedWriter(new FileWriter(root));
@@ -181,7 +186,7 @@ public class Compare extends HttpServlet {
 		}finally{if(bw!=null)try {bw.close();} catch (IOException e) {e.printStackTrace();}}
 	}
 	private void pasteFile(String file,int m){
-		Map<String,String[]> map=mapFile(getServletContext(),"mapFile.txt");
+		Map<String,String[]> map=mapFile(getServletContext(),mapFile);
 		String path1=map.get(file)[0];
 		String path2=map.get(file)[1];
 		if(m==1)pasteFile(path1,path2);

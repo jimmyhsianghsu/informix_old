@@ -22,18 +22,22 @@ public class RegTest {
 		String s;
 		while ((s = br.readLine()) != null)
 		    sb1.append(s + '\n');
+		if(br!=null)br.close();
 	    } catch (IOException e) {
 		e.printStackTrace();
 	    }
+		match(sb1.toString());
+	}
 	}
 
+	public static String match(String sb1){
+	StringBuffer sb0 = new StringBuffer();
 	StringBuffer sb2 = new StringBuffer();
 	String ptn0 = "(\\w+<?\\w+>?) +(\\w+)\\((( *(@ *\\w+ *\\( *(name *= *)?\"\\w+\" *\\))? *\\w+ +\\w+ *,?\\s*)*)\\) *[;{]";
 	String ptn1 = "(\\w+) +(\\w+),?";
 	Matcher matcher0 = Pattern.compile(ptn0).matcher(sb1.toString());
 	while (matcher0.find()) {
-	    System.out.println(matcher0.group(2) + "\n\t(" + matcher0.group(3).replaceAll("\\s*\\n\\s*", " ") + "):"
-		    + matcher0.group(1));
+	    sb0.append(matcher0.group(2) + "\n\t(" + matcher0.group(3).replaceAll("\\s*\\n\\s*", " ") + "):"+ matcher0.group(1)+'\n');
 	    sb2.append("/**\n *\n *\n");
 	    Matcher matcher1 = Pattern.compile(ptn1).matcher(matcher0.group(3));
 	    while (matcher1.find())
@@ -51,6 +55,7 @@ public class RegTest {
 	    sb2.append(" */\n");
 	    sb2.append(matcher0.group(0).replaceAll("\\s*\\n\\s*", " ") + "\n\n");
 	}
-	System.out.println("\n" + sb2);
+	System.out.println(sb0+"\n"+sb2);
+	return sb0+"\n"+sb2;
     }
 }
