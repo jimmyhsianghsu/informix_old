@@ -408,13 +408,13 @@
 						}else if(c.sqlMode==2){
 							if(getMeta(tab,i1).pk)s2+=i1+"='"+c1+"',\n";
 						}else{
-							if(getMeta(tab,i1).pk)s2+=i1+"='"+c1+"',\n";
+							if(getMeta(tab,i1).pk)s2+=i1+"='"+c1+"' and \n";
 							else s1+=i1+"='"+c1+"',\n";
 						}
 				});
 				if(c.sqlMode==1)s+=s1.substring(0,s1.length-2)+'\n)\n'+s2.substring(0,s2.length-2)+'\n);\n\n';
 				else if(c.sqlMode==2)s+=s1+s2.substring(0,s2.length-2)+'\n;\n\n';
-				else s+=s1.substring(0,s1.length-2)+'\n'+s2.substring(0,s2.length-2)+'\n;\n\n';
+				else s+=s1.substring(0,s1.length-2)+'\n'+s2.substring(0,s2.length-6)+'\n;\n\n';
 				c.sqlMode=null;
 			});
 			$tab.datagrid('acceptChanges');
@@ -537,6 +537,7 @@
 							</td>
 							<td>
 								<input type="text" id="idCdWidth" value="900" size="5"/><input type="text" id="idCdHeight" value="800" size="5"/><input type="button" value="initCD" onclick="drawCDs()"/><input type="button" value="moveCD" onclick="moveCD()"/>
+								<input type="button" value="closeTabs" onclick="$.each($('#tabMeta .easyui-tabs').tabs('tabs'),function(i,c){$('#tabMeta .easyui-tabs').tabs('close',$(c).panel('options').title);});$.each($('#tabData .easyui-tabs').tabs('tabs'),function(i,c){$('#tabData .easyui-tabs').tabs('close',$(c).panel('options').title);});"/><input type="button" value="closeClick" onclick="$('#tabMeta .easyui-datagrid').each(function(){$(this).datagrid('unselectAll');});"/>
 							</td>
 						</tr>
 					</table>
